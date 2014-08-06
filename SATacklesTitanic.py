@@ -1,89 +1,91 @@
-
-import pandas as pd
-import numpy as np
 import csv as csv
+import numpy as np
+import pandas as pd
+import pylab as P
 from sklearn.ensemble import RandomForestClassifier
 
-# Data cleanup
-# TRAIN DATA
-train_df = pd.read_csv('train.csv', header=0)        # Load the train file into a dataframe
+#------------------TRAIN DATA START--------------------#
+train_df = pd.read_csv("train.csv", header=0)
 
-# I need to convert all strings to integer classifiers.
-# I need to fill in the missing values of the data and make it complete.
+train_df['Gender'] = train_df.Sex.map({'female':0, 'male':1}).astype(int)
+train_df['EmbarkedInt'] = train_df.Embarked.fillna('NoEntry').map({'NoEntry':-1, 'S':0, 'C':1, 'Q':2}).astype(int)
+train_df['AgeFill'] = train_df.Age
 
-# female = 0, Male = 1
-train_df['Gender'] = train_df['Sex'].map( {'female': 0, 'male': 1} ).astype(int)
+median_ages = np.zeros((2,3))
 
-# Embarked from 'C', 'Q', 'S'
-# Note this is not ideal: in translating categories to numbers, Port "2" is not 2 times greater than Port "1", etc.
+#Fill in missing ages
+for i in range(0,2):
+    for j in range (0,3):
+        median_ages[i,j] = train_df[(train_df.Gender == i) & (train_df.Pclass == j+1)].Age.dropna().median()
 
-# All missing Embarked -> just make them embark from most common place
-if len(train_df.Embarked[ train_df.Embarked.isnull() ]) > 0:
-	train_df.Embarked[ train_df.Embarked.isnull() ] = train_df.Embarked.dropna().mode().values
+for i in range(0,2):
+    for j in range (0,3):
+        train_df.loc[((train_df.Age.isnull()) & (train_df.Gender == i) & (train_df.Pclass == j+1), 'AgeFill')] = median_ages[i,j]
 
-Ports = list(enumerate(np.unique(train_df['Embarked'])))    # determine all values of Embarked,
-Ports_dict = { name : i for i, name in Ports }              # set up a dictionary in the form  Ports : index
-train_df.Embarked = train_df.Embarked.map( lambda x: Ports_dict[x]).astype(int)     # Convert all Embark strings to int
+train_df['AgeIsNull'] = pd.isnull(train_df.Age).astype(int)
 
-# All the ages with no data -> make the median of all Ages
-median_age = train_df['Age'].dropna().median()
-if len(train_df.Age[ train_df.Age.isnull() ]) > 0:
-	train_df.loc[ (train_df.Age.isnull()), 'Age'] = median_age
+#Calculate familysize from parents/children + siblings/spouses
+train_df['FamilySize'] = train_df.Parch + train_df.SibSp
+#Calculate a value based on age and class
+train_df['Age*Class'] = train_df.AgeFill * train_df.Pclass
 
-# Remove the Name column, Cabin, Ticket, and Sex (since I copied and filled it to Gender)
-train_df = train_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'PassengerId'], axis=1) 
+#Drop unnecessary columns
+train_df = train_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'Embarked', 'Age', 'PassengerId'], axis=1)
 
+#Drop fare column as this column is biased
+train_df = train_df.drop(['Fare'], axis=1)
 
-# TEST DATA
-test_df = pd.read_csv('test.csv', header=0)        # Load the test file into a dataframe
+train_data = train_df.values
 
-# I need to do the same with the test data now, so that the columns are the same as the training data
-# I need to convert all strings to integer classifiers:
-# female = 0, Male = 1
-test_df['Gender'] = test_df['Sex'].map( {'female': 0, 'male': 1} ).astype(int)
+#------------------TRAIN DATA END----------------------#
 
-# Embarked from 'C', 'Q', 'S'
-# All missing Embarked -> just make them embark from most common place
-if len(test_df.Embarked[ test_df.Embarked.isnull() ]) > 0:
-	test_df.Embarked[ test_df.Embarked.isnull() ] = test_df.Embarked.dropna().mode().values
-# Again convert all Embarked strings to int
-test_df.Embarked = test_df.Embarked.map( lambda x: Ports_dict[x]).astype(int)
+#------------------TEST DATA START---------------------#
+test_df = pd.read_csv("train_test.csv", header=0)
 
+test_df['Gender'] = test_df.Sex.map({'female':0, 'male':1}).astype(int)
+test_df['EmbarkedInt'] = test_df.Embarked.fillna('NoEntry').map({'NoEntry':-1, 'S':0, 'C':1, 'Q':2}).astype(int)
+test_df['AgeFill'] = test_df.Age
 
-# All the ages with no data -> make the median of all Ages
-median_age = test_df['Age'].dropna().median()
-if len(test_df.Age[ test_df.Age.isnull() ]) > 0:
-	test_df.loc[ (test_df.Age.isnull()), 'Age'] = median_age
+median_ages = np.zeros((2,3))
 
-# All the missing Fares -> assume median of their respective class
-if len(test_df.Fare[ test_df.Fare.isnull() ]) > 0:
-	median_fare = np.zeros(3)
-	for f in range(0,3):                                              # loop 0 to 2
-		median_fare[f] = test_df[ test_df.Pclass == f+1 ]['Fare'].dropna().median()
-	for f in range(0,3):                                              # loop 0 to 2
-		test_df.loc[ (test_df.Fare.isnull()) & (test_df.Pclass == f+1 ), 'Fare'] = median_fare[f]
+#Fill in missing ages
+for i in range(0,2):
+    for j in range (0,3):
+        median_ages[i,j] = test_df[(test_df.Gender == i) & (test_df.Pclass == j+1)].Age.dropna().median()
+
+for i in range(0,2):
+    for j in range (0,3):
+        test_df.loc[((test_df.Age.isnull()) & (test_df.Gender == i) & (test_df.Pclass == j+1), 'AgeFill')] = median_ages[i,j]
+
+test_df['AgeIsNull'] = pd.isnull(test_df.Age).astype(int)
+
+#Calculate familysize from parents/children + siblings/spouses
+test_df['FamilySize'] = test_df.Parch + test_df.SibSp
+#Calculate a value based on age and class
+test_df['Age*Class'] = test_df.AgeFill * test_df.Pclass
+
 
 # Collect the test data's PassengerIds before dropping it
 ids = test_df['PassengerId'].values
-# Remove the Name column, Cabin, Ticket, and Sex (since I copied and filled it to Gender)
-test_df = test_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'PassengerId'], axis=1) 
 
+#Drop unnecessary columns
+test_df = test_df.drop(['Name', 'Sex', 'Ticket', 'Cabin', 'Embarked', 'Age', 'PassengerId'], axis=1)
 
-# The data is now ready to go. So lets fit to the train, then predict to the test!
-# Convert back to a numpy array
-train_data = train_df.values
+#Drop fare column as this column is biased
+test_df = test_df.drop(['Fare'], axis=1)
+
 test_data = test_df.values
-
+#------------------TEST DATA END-----------------------#
 
 print 'Training...'
 forest = RandomForestClassifier(n_estimators=100)
-forest = forest.fit( train_data[0::,1::], train_data[0::,0] )
+forest = forest.fit(train_data[0::,1::], train_data[0::,0] )
 
 print 'Predicting...'
 output = forest.predict(test_data).astype(int)
 
 
-predictions_file = open("myfirstforest.csv", "wb")
+predictions_file = open("mymodel.csv", "wb")
 open_file_object = csv.writer(predictions_file)
 open_file_object.writerow(["PassengerId","Survived"])
 open_file_object.writerows(zip(ids, output))
